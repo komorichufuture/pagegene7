@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>シンプルHTMLプレビューツール（クリックでコード選択＋エクスポート）</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        "游ゴシック体", "Yu Gothic", sans-serif;
+      background: #020617;
+      color: #e5e7eb;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 8px 16px;
+      border-bottom: 1px solid #1f2937;
+      background: #020617;
+      font-size: 14px;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+
+    .left-panel {
+      width: 50%;
+      border-right: 1px solid #1f2937;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .right-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    /* ---- ツールバー（タブ＋折りたたみ） ---- */
+
+    .toolbar {
+      padding: 8px;
+      border-bottom: 1px solid #1f2937;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toolbar-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .toolbar-tab-btn {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid #4b5563;
+      background: #020617;
+      color: #e5e7eb;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .toolbar-tab-btn.active {
+      background: #1f2937;
+      border-color: #38bdf8;
+      color: #e0f2fe;
+    }
+
+    .toolbar-panels {
+      border-radius: 6px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      padding: 6px;
+    }
+
+    .toolbar-panel {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .toolbar-panel.active {
+      display: flex;
+    }
+
+    .toolbar-section {
+      border-radius: 4px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      overflow: hidden;
+    }
+
+    .toolbar-section-header {
+      padding: 4px 8px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      background: #020617;
+    }
+
+    .toolbar-section-header span {
+      opacity: 0.85;
+    }
+
+    .toolbar-section-header .arrow {
+      font-size: 10px;
+      opacity: 0.7;
+    }
+
+    .toolbar-section-body {
+      padding: 4px 6px 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .toolbar-section.collapsed .toolbar-section-body {
+      display: none;
+    }
+
+    .toolbar-section.collapsed .toolbar-section-header .arrow {
+      transform: rotate(-90deg);
+    }
+
+    button {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      border: 1px solid #4b5563;
+      background: #111827;
+      color: #e5e7eb;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    button:hover {
+      background: #1f2937;
+    }
+
+    textarea {
+      flex: 1;
+      width: 100%;
+      border: none;
+      outline: none;
+      background: #020617;
+      color: #e5e7eb;
+      font-family: "SF Mono", Consolas, Menlo, monospace;
+      font-size: 12px;
+      padding: 8px;
+      resize: none;
+    }
+
+    .preview-header {
+      padding: 8px 12px;
+      border-bottom: 1px solid #1f2937;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+
+    .preview-wrapper {
+      flex: 1;
+      padding: 8px;
+      min-height: 0;
+      position: relative;
+    }
+
+    /* --- かんたん編集オーバーレイ（移動・リサイズ） --- */
+    #edit-overlay {
+      position: absolute;
+      border: 1px dashed rgba(248, 250, 252, 0.55);
+      border-radius: 10px;
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
+      display: none;
+      z-index: 5;
+      cursor: move;
+      touch-action: none;
+      user-select: none;
+    }
+
+    #edit-overlay .handle {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(56, 189, 248, 0.9);
+      background: rgba(2, 6, 23, 0.9);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+      z-index: 6;
+    }
+
+    #edit-overlay .handle.nw { left: -5px; top: -5px; cursor: nwse-resize; }
+    #edit-overlay .handle.ne { right: -5px; top: -5px; cursor: nesw-resize; }
+    #edit-overlay .handle.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+    #edit-overlay .handle.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+
+
+    #preview-frame {
+      width: 100%;
+      height: 100%;
+      border: 1px solid #1f2937;
+      background: #020617;
+    }
+
+    .status {
+      font-size: 11px;
+      opacity: 0.8;
+      padding: 4px 8px;
+      border-top: 1px solid #1f2937;
+    }
+
+    .status.ok { color: #bbf7d0; }
+    .status.error { color: #fecaca; }
+  </style>
+</head>
+<body>
+  <header>シンプルHTMLプレビューツール — クリックでコード選択＋エクスポート</header>
+
+  <main>
+    <!-- 左側：HTML入力 -->
+    <section class="left-panel">
+      <div class="toolbar">
+        <!-- タブ -->
+        <div class="toolbar-tabs">
+          <button type="button" class="toolbar-tab-btn active" data-tab="insert">挿入</button>
+          <button type="button" class="toolbar-tab-btn" data-tab="draw">描画</button>
+          <button type="button" class="toolbar-tab-btn" data-tab="decorate">装飾</button>
+          <button type="button" class="toolbar-tab-btn" data-tab="spacing">余白</button>
+          <button type="button" class="toolbar-tab-btn" data-tab="other">その他</button>
+        </div>
+
+        <!-- タブごとのパネル -->
+        <div class="toolbar-panels">
+          <!-- 挿入タブ -->
+          <div class="toolbar-panel active" data-tab-panel="insert">
+            <div class="toolbar-section">
+              <div class="toolbar-section-header" onclick="toggleSection(this)">
+                <span>基本ブロック</span>
+                <span class="arrow">▼</span>
+              </div>
+              <div class="toolbar-section-body">
+                <button type="button" onclick="insertTextBlock()">テキスト</button>
+                <button type="button" onclick="insertImage()">画像</button>
+                <button type="button" onclick="insertButton()">ボタン</button>
+                <button type="button" onclick="insertLink()">リンク</button>
+              </div>
+            </div>
+          </div>
+
+<!-- 描画タブ -->
+<div class="toolbar-panel" data-tab-panel="draw">
+  <div class="toolbar-section">
+    <div class="toolbar-section-header" onclick="toggleSection(this)">
+      <span>レイアウト（グリッド）</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="toolbar-section-body">
+      <button type="button" onclick="insertGrid2Cols()">横2グリッド</button>
+      <button type="button" onclick="insertGrid3Cols()">横3グリッド</button>
+    </div>
+  </div>
+</div>
+
+          <!-- 装飾タブ -->
+          <div class="toolbar-panel" data-tab-panel="decorate">
+            <div class="toolbar-section">
+              <div class="toolbar-section-header" onclick="toggleSection(this)">
+                <span>アニメーション</span>
+                <span class="arrow">▼</span>
+              </div>
+              <div class="toolbar-section-body">
+                <button type="button" onclick="applyEffectToSelectedTag('fade-in')">fade-in（タグ）</button>
+                <button type="button" onclick="applyEffectToSelectedTag('slide-in')">slide-in（タグ）</button>
+              </div>
+            </div>
+
+            <div class="toolbar-section">
+              <div class="toolbar-section-header" onclick="toggleSection(this)">
+                <span>ボックス装飾・リンク</span>
+                <span class="arrow">▼</span>
+              </div>
+              <div class="toolbar-section-body">
+                <button type="button" onclick="wrapWithEffect('glow-box')">光る枠</button>
+                                                <button type="button" onclick="wrapWithLink()">リンクを貼る</button>
+              </div>
+            </div>
+          </div>
+            <div class="toolbar-section">
+              <div class="toolbar-section-header" onclick="toggleSection(this)">
+                <span>テキスト</span>
+                <span class="arrow">▼</span>
+              </div>
+              <div class="toolbar-section-body">
+                <button type="button" onclick="applyTextSizePreset('s')">文字S</button>
+                <button type="button" onclick="applyTextSizePreset('m')">文字M</button>
+                <button type="button" onclick="applyTextSizePreset('l')">文字L</button>
+              </div>
+            </div>
+
+
+
+          <!-- 余白タブ -->
+          <div class="toolbar-panel" data-tab-panel="spacing">
+            <div class="toolbar-section">
+              <div class="toolbar-section-header" onclick="toggleSection(this)">
+                <span>マージン（縦方向）</span>
+                <span class="arrow">▼</span>
+              </div>
+              <div class="toolbar-section-body">
+                <button type="button" onclick="addMarginTop(16)">上に16px</button>
+                <button type="button" onclick="addMarginBottom(16)">下に16px</button>
+                <button type="button" onclick="addMarginBottom(32)">下に32px</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- その他タブ -->
+          <div class="toolbar-panel" data-tab-panel="other">
+            <div class="toolbar-section">
+              <div class="toolbar-section-header" onclick="toggleSection(this)">
+                <span>プレビュー・エクスポート</span>
+                <span class="arrow">▼</span>
+              </div>
+              <div class="toolbar-section-body">
+                <button type="button" onclick="updatePreview()">プレビュー更新</button>
+                <button type="button" onclick="exportHtml()">エクスポートHTML</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <textarea id="html-input" placeholder="ここに任意のHTMLを書いてください"></textarea>
+      <div id="status" class="status">待機中…</div>
+    </section>
+
+    <!-- 右側：プレビュー -->
+    <section class="right-panel">
+      <div class="preview-header">
+        <span>プレビュー（要素クリックでコード側の該当タグが選択されます）</span>
+        <button type="button" onclick="updatePreview()">再描画</button>
+      </div>
+      <div class="preview-wrapper">
+        <iframe id="preview-frame"></iframe>
+        <div id="edit-overlay">
+          <div class="handle nw" data-dir="nw"></div>
+          <div class="handle ne" data-dir="ne"></div>
+          <div class="handle sw" data-dir="sw"></div>
+          <div class="handle se" data-dir="se"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const htmlInput = document.getElementById("html-input");
+    const statusEl = document.getElementById("status");
+    const previewFrame = document.getElementById("preview-frame");
+
+    // --- かんたん編集（移動・リサイズ） ---
+    const overlayEl = document.getElementById("edit-overlay");
+    let selectedNodeId = null;
+    let selectedPreviewEl = null;
+
+    const editState = {
+      mode: null, // "move" | "resize"
+      dir: null,  // "nw" | "ne" | "sw" | "se"
+      startX: 0,
+      startY: 0,
+      startRect: null,
+      startWidth: 0,
+      startHeight: 0,
+      startLeft: 0,
+      startTop: 0,
+      startRatio: 1
+    };
+
+    function clamp(n, min, max) {
+      return Math.max(min, Math.min(max, n));
+    }
+
+    function getIframeElementByNodeId(nodeId) {
+      const doc = previewFrame.contentDocument || previewFrame.contentWindow.document;
+      return doc.querySelector(`[data-node-id="${CSS.escape(nodeId)}"]`);
+    }
+
+    function syncOverlayToSelected() {
+      if (!selectedNodeId) {
+        overlayEl.style.display = "none";
+        return;
+      }
+
+      const iframeRect = previewFrame.getBoundingClientRect();
+      const wrapRect = previewFrame.parentElement.getBoundingClientRect(); // .preview-wrapper
+      const el = getIframeElementByNodeId(selectedNodeId);
+
+      if (!el) {
+        overlayEl.style.display = "none";
+        return;
+      }
+
+      selectedPreviewEl = el;
+
+      const r = el.getBoundingClientRect();
+
+      // overlayは親（preview-wrapper）基準
+      const left = (iframeRect.left - wrapRect.left) + r.left;
+      const top  = (iframeRect.top  - wrapRect.top)  + r.top;
+
+      overlayEl.style.display = "block";
+      overlayEl.style.left = `${left}px`;
+      overlayEl.style.top = `${top}px`;
+      overlayEl.style.width = `${r.width}px`;
+      overlayEl.style.height = `${r.height}px`;
+    }
+
+    // iframe内の選択要素のスタイルをテキストエリアにコミット（ドラッグ終了時）
+    function commitSelectedStyle() {
+      if (!selectedNodeId || !selectedPreviewEl) return;
+
+      const w = Math.round(selectedPreviewEl.getBoundingClientRect().width);
+      const h = Math.round(selectedPreviewEl.getBoundingClientRect().height);
+
+      // left/top は inline style を優先（無ければ 0）
+      const inline = selectedPreviewEl.getAttribute("style") || "";
+      const leftMatch = inline.match(/(?:^|;)\s*left\s*:\s*([-0-9.]+)px\s*;?/i);
+      const topMatch  = inline.match(/(?:^|;)\s*top\s*:\s*([-0-9.]+)px\s*;?/i);
+      const posMatch  = inline.match(/(?:^|;)\s*position\s*:\s*([^;]+)\s*;?/i);
+
+      const left = leftMatch ? Number(leftMatch[1]) : 0;
+      const top  = topMatch  ? Number(topMatch[1])  : 0;
+      const position = posMatch ? posMatch[1].trim() : (left || top ? "relative" : "");
+
+      updateOpeningTagStyleByNodeId(selectedNodeId, {
+        width: `${w}px`,
+        height: `${h}px`,
+        ...(position ? { position } : {}),
+        ...(left || position ? { left: `${Math.round(left)}px` } : {}),
+        ...(top  || position ? { top: `${Math.round(top)}px` } : {})
+      });
+
+      // mapがズレないように再描画（タグ構造は変わらないので nodeId は維持される）
+      updatePreview();
+    }
+
+    function updateOpeningTagStyleByNodeId(nodeId, props) {
+      const mapping = nodeIndexMap[nodeId];
+      if (!mapping) return;
+
+      const text = htmlInput.value;
+      const start = mapping.start;
+      const end = mapping.end;
+
+      const selected = text.slice(start, end);
+      const tagMatch = selected.match(/^<([a-zA-Z0-9]+)([^>]*)>/);
+      if (!tagMatch) return;
+
+      const tagName = tagMatch[1];
+      let attrs = tagMatch[2] || "";
+
+      function setStyleProp(styleContent, prop, value) {
+        const re = new RegExp(`(?:^|;)\\s*${prop}\\s*:[^;]*;?`, "ig");
+        styleContent = styleContent.replace(re, "");
+        styleContent = styleContent.trim();
+        if (styleContent && !styleContent.endsWith(";")) styleContent += ";";
+        styleContent += ` ${prop}: ${value};`;
+        return styleContent;
+      }
+
+      const styleMatch = attrs.match(/\sstyle="([^"]*)"/);
+      if (styleMatch) {
+        let styleContent = styleMatch[1];
+        Object.entries(props).forEach(([k, v]) => {
+          styleContent = setStyleProp(styleContent, k, v);
+        });
+        attrs = attrs.replace(/\sstyle="[^"]*"/, ` style="${styleContent}"`);
+      } else {
+        let styleContent = "";
+        Object.entries(props).forEach(([k, v]) => {
+          styleContent = setStyleProp(styleContent, k, v);
+        });
+        attrs += ` style="${styleContent}"`;
+      }
+
+      const newTag = `<${tagName}${attrs}>`;
+      const updated = selected.replace(/^<([a-zA-Z0-9]+)([^>]*)>/, newTag);
+
+      htmlInput.value = text.slice(0, start) + updated + text.slice(end);
+
+      // 選択位置を更新
+      htmlInput.selectionStart = start;
+      htmlInput.selectionEnd = start + newTag.length;
+    }
+
+    function beginMove(e) {
+      if (!selectedPreviewEl) return;
+      editState.mode = "move";
+      editState.startX = e.clientX;
+      editState.startY = e.clientY;
+      editState.startRect = selectedPreviewEl.getBoundingClientRect();
+
+      // まず position を relative にして left/top を使えるようにする
+      const curPos = (selectedPreviewEl.style.position || "").trim();
+      if (!curPos) selectedPreviewEl.style.position = "relative";
+
+      editState.startLeft = Number((selectedPreviewEl.style.left || "0").replace("px", "")) || 0;
+      editState.startTop  = Number((selectedPreviewEl.style.top  || "0").replace("px", "")) || 0;
+    }
+
+    function beginResize(e, dir) {
+      if (!selectedPreviewEl) return;
+      editState.mode = "resize";
+      editState.dir = dir;
+      editState.startX = e.clientX;
+      editState.startY = e.clientY;
+
+      const r = selectedPreviewEl.getBoundingClientRect();
+      editState.startWidth = r.width;
+      editState.startHeight = r.height;
+      editState.startRatio = r.width / Math.max(1, r.height);
+
+      // width/height を明示（これがないと内容依存で暴れる）
+      selectedPreviewEl.style.width = `${Math.round(r.width)}px`;
+      selectedPreviewEl.style.height = `${Math.round(r.height)}px`;
+    }
+
+    function onPointerMove(e) {
+      if (!editState.mode || !selectedPreviewEl) return;
+
+      const dx = e.clientX - editState.startX;
+      const dy = e.clientY - editState.startY;
+
+      if (editState.mode === "move") {
+        selectedPreviewEl.style.left = `${Math.round(editState.startLeft + dx)}px`;
+        selectedPreviewEl.style.top  = `${Math.round(editState.startTop + dy)}px`;
+        syncOverlayToSelected();
+        return;
+      }
+
+      if (editState.mode === "resize") {
+        let w = editState.startWidth;
+        let h = editState.startHeight;
+
+        const dir = editState.dir;
+
+        // 基本はSE基準で増減、他は符号を変える
+        const sx = (dir === "nw" || dir === "sw") ? -1 : 1;
+        const sy = (dir === "nw" || dir === "ne") ? -1 : 1;
+
+        w = w + dx * sx;
+        h = h + dy * sy;
+
+        // Shiftで正方形（or 比率固定）
+        if (e.shiftKey) {
+          const target = Math.max(w, h);
+          w = target;
+          h = target;
+        }
+
+        w = clamp(w, 40, 2000);
+        h = clamp(h, 40, 2000);
+
+        selectedPreviewEl.style.width = `${Math.round(w)}px`;
+        selectedPreviewEl.style.height = `${Math.round(h)}px`;
+
+        syncOverlayToSelected();
+      }
+    }
+
+    function endEdit() {
+      if (!editState.mode) return;
+      editState.mode = null;
+      editState.dir = null;
+
+      // ここでHTMLに反映
+      commitSelectedStyle();
+    }
+
+    // overlayイベント（pointer captureで、ドラッグ中にカーソルがiframe上に出ても確定できるようにする）
+    overlayEl.addEventListener("pointerdown", (e) => {
+      if (!selectedNodeId) return;
+
+      // 右クリック等は無視
+      if (e.button !== 0) return;
+
+      const handle = e.target.closest(".handle");
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (handle) {
+        beginResize(e, handle.getAttribute("data-dir"));
+      } else {
+        beginMove(e);
+      }
+
+      // これが肝：ポインタを掴む（iframe上でも pointerup が必ずここに返ってくる）
+      try { overlayEl.setPointerCapture(e.pointerId); } catch (_) {}
+
+      const onMove = (ev) => onPointerMove(ev);
+
+      const onUp = (ev) => {
+        try { overlayEl.releasePointerCapture(ev.pointerId); } catch (_) {}
+        overlayEl.removeEventListener("pointermove", onMove);
+        overlayEl.removeEventListener("pointerup", onUp);
+        overlayEl.removeEventListener("pointercancel", onCancel);
+        endEdit();
+      };
+
+      const onCancel = (ev) => {
+        try { overlayEl.releasePointerCapture(ev.pointerId); } catch (_) {}
+        overlayEl.removeEventListener("pointermove", onMove);
+        overlayEl.removeEventListener("pointerup", onUp);
+        overlayEl.removeEventListener("pointercancel", onCancel);
+        endEdit();
+      };
+
+      overlayEl.addEventListener("pointermove", onMove);
+      overlayEl.addEventListener("pointerup", onUp);
+      overlayEl.addEventListener("pointercancel", onCancel);
+    });
+
+
+    window.addEventListener("resize", () => {
+      syncOverlayToSelected();
+    });
+
+
+    // プレビュー用：nodeId → 元HTML上の文字位置マップ
+    let nodeIndexMap = {};
+    // ADDマーカー用：addId → 元HTML上の位置マップ
+    let addMarkerMap = {};
+
+    // ---- ツールバーのタブ切り替え・セクション折りたたみ ----
+
+    function initToolbarTabs() {
+      const tabButtons = document.querySelectorAll(".toolbar-tab-btn");
+      const panels = document.querySelectorAll(".toolbar-panel");
+
+      tabButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const tab = btn.getAttribute("data-tab");
+
+          tabButtons.forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+
+          panels.forEach((panel) => {
+            if (panel.getAttribute("data-tab-panel") === tab) {
+              panel.classList.add("active");
+            } else {
+              panel.classList.remove("active");
+            }
+          });
+        });
+      });
+    }
+
+    function toggleSection(headerEl) {
+      const section = headerEl.closest(".toolbar-section");
+      section.classList.toggle("collapsed");
+    }
+
+    // プレビュー＆エクスポート共通のCSS
+    const previewBaseCss = `
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 16px;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          "游ゴシック体", "Yu Gothic", sans-serif;
+        background: #000000;
+        color: #e5e7eb;
+      }
+
+      a {
+        color: #38bdf8;
+      }
+
+      img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+      }
+
+      .btn-primary {
+        display: inline-block;
+        padding: 8px 16px;
+        border-radius: 999px;
+        border: 1px solid #38bdf8;
+        background: rgba(56, 189, 248, 0.08);
+        color: #e5e7eb;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease,
+          background-color 0.15s ease;
+      }
+      .btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 25px rgba(15, 23, 42, 0.8);
+        background: rgba(56, 189, 248, 0.16);
+      }
+
+      .fade-in {
+        opacity: 0;
+        animation: fade-in 0.6s ease-out forwards;
+      }
+      @keyframes fade-in {
+        from { opacity: 0; transform: translateY(4px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+
+      .slide-in {
+        opacity: 0;
+        animation: slide-in 0.5s ease-out forwards;
+      }
+      @keyframes slide-in {
+        from { opacity: 0; transform: translateX(24px); }
+        to   { opacity: 1; transform: translateX(0); }
+      }
+
+      .glow-box {
+        border-radius: 12px;
+        border: 1px solid rgba(56, 189, 248, 0.6);
+        box-shadow: 0 0 20px rgba(56, 189, 248, 0.35);
+        padding: 16px;
+      }
+
+      .text-block {
+        margin-bottom: 16px;
+        line-height: 1.7;
+      }
+
+
+      /* --- テキストサイズ（プリセット） --- */
+      .size-s { font-size: 12px; }
+      .size-m { font-size: 14px; }
+      .size-l { font-size: 18px; }
+      [data-node-id] {
+        cursor: pointer;
+      }
+      [data-node-id]:hover {
+        outline: 1px dashed rgba(248, 250, 252, 0.4);
+      }
+
+      /* --- ADDマーカー（エディタ専用の挿入ポイント） --- */
+      .add-marker {
+        position: relative;
+        border: 1px dashed rgba(56, 189, 248, 0.55);
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin: 10px 0;
+        background: rgba(56, 189, 248, 0.06);
+        cursor: pointer;
+      }
+      .add-marker:hover {
+        background: rgba(56, 189, 248, 0.10);
+      }
+      .add-marker::before {
+        content: "+ ADD";
+        position: absolute;
+        top: -10px;
+        left: 10px;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(56, 189, 248, 0.7);
+        background: rgba(2, 6, 23, 0.92);
+        color: #e0f2fe;
+        letter-spacing: 0.04em;
+      }
+      .add-marker[data-add-label]::after {
+        content: attr(data-add-label);
+        position: absolute;
+        top: -10px;
+        left: 64px;
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.5);
+        background: rgba(2, 6, 23, 0.92);
+        color: rgba(226, 232, 240, 0.9);
+      }
+
+    `;
+
+    function setStatus(msg, isError) {
+      statusEl.textContent = msg;
+      statusEl.classList.toggle("error", !!isError);
+      statusEl.classList.toggle("ok", !isError);
+    }
+
+    // HTML文字列をDOMに変換して data-node-id を振る（textareaは書き換えない）
+    function instrumentHtml(raw) {
+      nodeIndexMap = {};
+      addMarkerMap = {};
+
+      // --- ADDマーカー検出（生HTMLのコメント： <!-- ADD --> / <!-- ADD: label --> ）---
+      const addMatches = [];
+      const addRe = /<!--\s*ADD(?:\s*:\s*([^>]*?))?\s*-->/gi;
+      let m;
+      let idx = 0;
+      while ((m = addRe.exec(raw)) !== null) {
+        idx++;
+        const addId = `addm-${idx}`;
+        const label = (m[1] || "").trim();
+        addMarkerMap[addId] = { start: m.index, end: m.index + m[0].length, label };
+        addMatches.push({ addId, label });
+      }
+
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(`<body>${raw}</body>`, "text/html");
+
+      // --- DOM内の ADDコメントを表示用要素に置換 ---
+      if (addMatches.length) {
+        const commentWalker = doc.createTreeWalker(
+          doc.body,
+          NodeFilter.SHOW_COMMENT,
+          null
+        );
+
+        let cursor = 0;
+        while (commentWalker.nextNode()) {
+          const c = commentWalker.currentNode;
+          const txt = (c.nodeValue || "").trim();
+          if (!/^ADD\b/i.test(txt)) continue;
+
+          const meta = addMatches[cursor++];
+          if (!meta) continue;
+
+          const el = doc.createElement("div");
+          el.className = "add-marker";
+          el.setAttribute("data-add-marker-id", meta.addId);
+          if (meta.label) el.setAttribute("data-add-label", meta.label);
+          el.textContent = meta.label ? `追加ポイント：${meta.label}` : "追加ポイント（ここに挿入）";
+
+          c.parentNode.replaceChild(el, c);
+        }
+      }
+
+      // タグ名ごとに「何番目の出現か」をカウント
+      const tagCount = {};
+
+      const walker = doc.createTreeWalker(
+        doc.body,
+        NodeFilter.SHOW_ELEMENT,
+        null
+      );
+
+      while (walker.nextNode()) {
+        const el = walker.currentNode;
+
+        // ADDマーカーは raw に存在しないので nodeId/mapping 対象外
+        if (el.hasAttribute("data-add-marker-id")) continue;
+
+        const tagName = el.tagName.toLowerCase();
+
+        const currentCount = tagCount[tagName] || 0; // 0番目,1番目,...
+        tagCount[tagName] = currentCount + 1;
+
+        const nodeId = String(Object.values(tagCount).reduce((a, b) => a + b, 0));
+        el.setAttribute("data-node-id", nodeId);
+
+        // 生HTML側で「tagName の currentCount+1 回目の <tagName」を探す
+        const startIndex = findNthTag(raw, tagName, currentCount);
+        if (startIndex !== -1) {
+          let end = raw.indexOf(">", startIndex);
+          if (end !== -1) end++;
+          nodeIndexMap[nodeId] = { start: startIndex, end };
+        }
+      }
+
+      return doc.body.innerHTML;
+    }
+
+
+    // 生HTML中で、「<tagName」で始まるタグの n 回目（0-based）の開始位置を探す
+    function findNthTag(source, tagName, n) {
+      const pattern = `<${tagName}`;
+      let from = 0;
+      let foundIndex = -1;
+      let count = 0;
+
+      while (true) {
+        const idx = source.indexOf(pattern, from);
+        if (idx === -1) break;
+
+        const nextChar = source[idx + pattern.length];
+        // タグ名の直後が「空白/改行/タブ/>/スラッシュ/CR」ならタグとして採用
+        if (
+          nextChar === " " ||
+          nextChar === "\n" ||
+          nextChar === "\t" ||
+          nextChar === "\r" ||
+          nextChar === ">" ||
+          nextChar === "/"
+        ) {
+          if (count === n) {
+            foundIndex = idx;
+            break;
+          }
+          count++;
+        }
+
+        from = idx + pattern.length;
+      }
+
+      return foundIndex;
+    }
+
+    function updatePreview() {
+      const raw = htmlInput.value || "";
+
+      let instrumented;
+      try {
+        instrumented = instrumentHtml(raw);
+      } catch (e) {
+        setStatus(
+          "プレビュー用HTMLの解析に失敗しました: " + (e && e.message ? e.message : e),
+          true
+        );
+        return;
+      }
+
+      const frameDoc =
+        previewFrame.contentDocument || previewFrame.contentWindow.document;
+
+      const frameHtml = `
+        <!DOCTYPE html>
+        <html lang="ja">
+        <head>
+          <meta charset="UTF-8" />
+          <title>Preview</title>
+          <style>${previewBaseCss}</style>
+        </head>
+        <body>
+          ${instrumented}
+          <script>
+            document.addEventListener("click", function(e) {
+              var add = e.target.closest("[data-add-marker-id]");
+              if (add) {
+                e.preventDefault();
+                e.stopPropagation();
+                var addId = add.getAttribute("data-add-marker-id");
+                parent.postMessage({ type: "addMarkerClick", addId: addId }, "*");
+                return;
+              }
+
+              var el = e.target.closest("[data-node-id]");
+              if (!el) return;
+              e.preventDefault();
+              e.stopPropagation();
+              var id = el.getAttribute("data-node-id");
+              parent.postMessage({ type: "nodeClick", nodeId: id }, "*");
+            });
+          <\/script>
+        </body>
+        </html>
+      `;
+
+      frameDoc.open();
+      frameDoc.write(frameHtml);
+      frameDoc.close();
+
+      setStatus("プレビューを更新しました。要素クリックでコード側が選択されます。", false);
+      syncOverlayToSelected();
+    }
+
+    // iframe → 親へのメッセージを受けて、該当タグ相当部分を選択
+    window.addEventListener("message", (event) => {
+      const data = event.data;
+      if (!data) return;
+
+      if (data.type === "addMarkerClick") {
+        const m = addMarkerMap[data.addId];
+        if (!m) {
+          setStatus(`ADDマーカー(${data.addId}) の位置が見つかりませんでした。`, true);
+          return;
+        }
+
+        const text = htmlInput.value;
+        const pos = Math.max(0, Math.min(m.start, text.length));
+
+        htmlInput.focus();
+        htmlInput.selectionStart = pos;
+        htmlInput.selectionEnd = pos;
+
+        const lineBefore = text.slice(0, pos).split("\n").length;
+        const approxLineHeight = 16;
+        htmlInput.scrollTop = (lineBefore - 4) * approxLineHeight;
+
+        // 追加ポイント選択時は編集オーバーレイを隠す
+        selectedNodeId = null;
+        selectedPreviewEl = null;
+        syncOverlayToSelected();
+
+        setStatus(m.label ? `ADDマーカー「${m.label}」に移動しました。` : "ADDマーカーに移動しました。", false);
+        return;
+      }
+
+      if (data.type !== "nodeClick") return;
+
+      const mapping = nodeIndexMap[data.nodeId];
+      if (!mapping) {
+        setStatus(`data-node-id=${data.nodeId} に対応する位置が見つかりませんでした。`, true);
+        return;
+      }
+
+      const text = htmlInput.value;
+      const start = Math.max(0, Math.min(mapping.start, text.length));
+      const end = Math.max(start, Math.min(mapping.end, text.length));
+
+      htmlInput.focus();
+      htmlInput.selectionStart = start;
+      htmlInput.selectionEnd = end;
+
+      const lineBefore = text.slice(0, start).split("\n").length;
+      const approxLineHeight = 16;
+      htmlInput.scrollTop = (lineBefore - 4) * approxLineHeight;
+
+      setStatus(`data-node-id=${data.nodeId} のタグ相当部分を選択しました。`, false);
+
+      // 編集オーバーレイを同期
+      selectedNodeId = data.nodeId;
+      syncOverlayToSelected();
+
+    });
+
+    // カーソル位置に文字列を挿入
+    function insertAtCursor(textarea, text) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const current = textarea.value;
+      textarea.value = current.slice(0, start) + text + current.slice(end);
+      const pos = start + text.length;
+      textarea.selectionStart = textarea.selectionEnd = pos;
+      textarea.focus();
+    }
+
+    function insertTextBlock() {
+      const snippet = `<div class="text-block">
+  ここにテキストを入力してください。<br />
+  2行目の文章も書けます。
+</div>
+
+`;
+      insertAtCursor(htmlInput, snippet);
+      setStatus("テキストブロックを挿入しました。", false);
+    }
+
+    function insertImage() {
+      const snippet = `<img src="images/sample.png" alt="説明テキスト" />
+
+`;
+      insertAtCursor(htmlInput, snippet);
+      setStatus("画像タグを挿入しました。パスは適宜変更してください。", false);
+    }
+
+    function insertButton() {
+      const snippet = `<a href="#" class="btn-primary">ボタンのラベル</a>
+
+`;
+      insertAtCursor(htmlInput, snippet);
+      setStatus("ボタン（リンク）を挿入しました。", false);
+    }
+
+    function insertLink() {
+      const snippet = `<a href="https://example.com" target="_blank">リンクテキスト</a>
+
+`;
+      insertAtCursor(htmlInput, snippet);
+      setStatus("リンクタグを挿入しました。", false);
+    }
+
+
+    function insertGrid2Cols() {
+      const snippet = `<div style="
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+">
+  <div class="glow-box">
+    左の枠
+  </div>
+
+  <div class="glow-box">
+    右の枠
+  </div>
+</div>
+
+`;
+      insertAtCursor(htmlInput, snippet);
+      setStatus("横2グリッドを挿入しました。", false);
+    }
+
+    function insertGrid3Cols() {
+      const snippet = `<div style="
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+">
+  <div class="glow-box">
+    1つ目の枠
+  </div>
+
+  <div class="glow-box">
+    2つ目の枠
+  </div>
+
+  <div class="glow-box">
+    3つ目の枠
+  </div>
+</div>
+
+`;
+      insertAtCursor(htmlInput, snippet);
+      setStatus("横3グリッドを挿入しました。", false);
+    }
+
+
+    
+    // --- テキストサイズ（S/M/L プリセット） ---
+    function applyTextSizePreset(sizeKey) {
+      const key = String(sizeKey || "").toLowerCase();
+      if (key !== "s" && key !== "m" && key !== "l") return;
+
+      setExclusiveClassToSelectedTag(
+        ["size-s", "size-m", "size-l"],
+        `size-${key}`
+      );
+
+      setStatus(`文字サイズを ${key.toUpperCase()} に設定しました。`, false);
+    }
+
+    function setExclusiveClassToSelectedTag(removeClasses, classToAdd) {
+      const text = htmlInput.value;
+      let start = htmlInput.selectionStart;
+      let end = htmlInput.selectionEnd;
+
+      // キャレットだけなら近傍の開始タグを推定
+      if (start === end) {
+        let pos = start;
+        let tagStart = pos;
+        while (tagStart > 0 && text[tagStart] !== "<") tagStart--;
+        let tagEnd = pos;
+        while (tagEnd < text.length && text[tagEnd] !== ">") tagEnd++;
+        if (text[tagEnd] === ">") tagEnd++;
+        start = tagStart;
+        end = tagEnd;
+      }
+
+      const selected = text.slice(start, end);
+      if (!selected.trim().startsWith("<")) {
+        alert("文字サイズを変えたい要素の開始タグ付近をクリックしてから実行してください。");
+        return;
+      }
+
+      const tagMatch = selected.match(/^<([a-zA-Z0-9]+)([^>]*)>/);
+      if (!tagMatch) {
+        alert("有効な開始タグが見つかりませんでした。");
+        return;
+      }
+
+      const tagName = tagMatch[1];
+      let attrs = tagMatch[2] || "";
+
+      const classMatch = attrs.match(/\sclass="([^"]*)"/);
+      if (classMatch) {
+        const tokens = classMatch[1].split(/\s+/).filter(Boolean);
+        const filtered = tokens.filter((t) => !removeClasses.includes(t));
+        if (classToAdd && !filtered.includes(classToAdd)) filtered.push(classToAdd);
+        const next = filtered.join(" ");
+        attrs = attrs.replace(/\sclass="[^"]*"/, ` class="${next}"`);
+      } else {
+        attrs += ` class="${classToAdd}"`;
+      }
+
+      const newTag = `<${tagName}${attrs}>`;
+      const updated = selected.replace(/^<([a-zA-Z0-9]+)([^>]*)>/, newTag);
+
+      htmlInput.value = text.slice(0, start) + updated + text.slice(end);
+      htmlInput.selectionStart = start;
+      htmlInput.selectionEnd = start + newTag.length;
+      htmlInput.focus();
+    }
+
+// 選択中の「開始タグ」にクラスを追加（ラップしない）
+    // グリッドコンテナ等、構造を崩したくない時に使う
+    function applyEffectToSelectedTag(effectClass) {
+      applyClassToSelectedTag(effectClass);
+      setStatus(`選択タグに .${effectClass} を付与しました。`, false);
+    }
+
+    function applyClassToSelectedTag(classToAdd) {
+      const text = htmlInput.value;
+      let start = htmlInput.selectionStart;
+      let end = htmlInput.selectionEnd;
+
+      // キャレットだけなら近傍の開始タグを推定
+      if (start === end) {
+        let pos = start;
+        let tagStart = pos;
+        while (tagStart > 0 && text[tagStart] !== "<") tagStart--;
+        let tagEnd = pos;
+        while (tagEnd < text.length && text[tagEnd] !== ">") tagEnd++;
+        if (text[tagEnd] === ">") tagEnd++;
+        start = tagStart;
+        end = tagEnd;
+      }
+
+      const selected = text.slice(start, end);
+      if (!selected.trim().startsWith("<")) {
+        alert("クラスを付けたい要素の開始タグ付近をクリックしてから実行してください。");
+        return;
+      }
+
+      const tagMatch = selected.match(/^<([a-zA-Z0-9]+)([^>]*)>/);
+      if (!tagMatch) {
+        alert("有効な開始タグが見つかりませんでした。");
+        return;
+      }
+
+      const tagName = tagMatch[1];
+      let attrs = tagMatch[2] || "";
+
+      // class に effectClass を付与（既存classがあれば追記）
+      const classMatch = attrs.match(/\sclass="([^"]*)"/);
+      if (classMatch) {
+        const current = classMatch[1];
+        const hasIt = current.split(/\s+/).includes(classToAdd);
+        const next = hasIt ? current : (current + " " + classToAdd).trim();
+        attrs = attrs.replace(/\sclass="[^"]*"/, ` class="${next}"`);
+      } else {
+        attrs += ` class="${classToAdd}"`;
+      }
+
+      const newTag = `<${tagName}${attrs}>`;
+      const updated = selected.replace(/^<([a-zA-Z0-9]+)([^>]*)>/, newTag);
+
+      htmlInput.value = text.slice(0, start) + updated + text.slice(end);
+      htmlInput.selectionStart = start;
+      htmlInput.selectionEnd = start + newTag.length;
+      htmlInput.focus();
+    }
+
+function wrapWithLink() {
+      const start = htmlInput.selectionStart;
+      const end = htmlInput.selectionEnd;
+      const current = htmlInput.value;
+
+      const selected = current.slice(start, end) || "リンクテキスト";
+
+      const url = prompt("リンク先URLを入力してください：", "https://");
+      if (!url) {
+        setStatus("リンク作成をキャンセルしました。", true);
+        return;
+      }
+
+      const wrapped = `<a href="${url}" target="_blank">${selected}</a>`;
+
+      htmlInput.value = current.slice(0, start) + wrapped + current.slice(end);
+      htmlInput.selectionStart = start;
+      htmlInput.selectionEnd = start + wrapped.length;
+      htmlInput.focus();
+
+      setStatus("選択部分にリンクを適用しました。", false);
+    }
+
+    function addMarginTop(px) {
+      applyMarginToSelectedTag("margin-top", px);
+    }
+
+    function addMarginBottom(px) {
+      applyMarginToSelectedTag("margin-bottom", px);
+    }
+
+    function applyMarginToSelectedTag(propName, px) {
+      const text = htmlInput.value;
+      let start = htmlInput.selectionStart;
+      let end = htmlInput.selectionEnd;
+
+      // カーソル位置から「囲んでいるタグ」を推定
+      if (start === end) {
+        // キャレットだけの場合は、その位置から前後に広げてタグを探す
+        let pos = start;
+        let tagStart = pos;
+        while (tagStart > 0 && text[tagStart] !== "<") tagStart--;
+        let tagEnd = pos;
+        while (tagEnd < text.length && text[tagEnd] !== ">") tagEnd++;
+        if (text[tagEnd] === ">") tagEnd++;
+
+        start = tagStart;
+        end = tagEnd;
+      }
+
+      const selected = text.slice(start, end);
+      if (!selected.trim().startsWith("<")) {
+        alert("余白を付けたい要素の開始タグ付近をクリックしてから実行してください。");
+        return;
+      }
+
+      // 開始タグ部分だけを対象にする
+      const tagMatch = selected.match(/^<([a-zA-Z0-9]+)([^>]*)>/);
+      if (!tagMatch) {
+        alert("有効な開始タグが見つかりませんでした。");
+        return;
+      }
+
+      const tagName = tagMatch[1];
+      let attrs = tagMatch[2] || "";
+
+      // style="" があるかどうか
+      const styleMatch = attrs.match(/\sstyle="([^"]*)"/);
+      if (styleMatch) {
+        let styleContent = styleMatch[1];
+
+        // 既存の同じプロパティを削除
+        const re = new RegExp(propName + "\\s*:[^;]*;?", "i");
+        styleContent = styleContent.replace(re, "").trim();
+
+        // セミコロンで終わっていなければ付ける
+        if (styleContent && !styleContent.endsWith(";")) {
+          styleContent += ";";
+        }
+
+        styleContent += ` ${propName}: ${px}px;`;
+
+        attrs = attrs.replace(/\sstyle="[^"]*"/, ` style="${styleContent}"`);
+      } else {
+        // style が無ければ新規追加
+        attrs += ` style="${propName}: ${px}px;"`;
+      }
+
+      const newTag = `<${tagName}${attrs}>`;
+      const updated = selected.replace(/^<([a-zA-Z0-9]+)([^>]*)>/, newTag);
+
+      // 置き換え
+      htmlInput.value = text.slice(0, start) + updated + text.slice(end);
+
+      // 選択位置をざっくり戻す
+      htmlInput.selectionStart = start;
+      htmlInput.selectionEnd = start + newTag.length;
+      htmlInput.focus();
+
+      setStatus(`${propName} に ${px}px を設定しました。`, false);
+    }
+
+
+    // エクスポート：data-node-id を削除して単体HTMLとしてダウンロード
+    function exportHtml() {
+      const raw = htmlInput.value || "";
+
+      // 念のため data-node-id="..." を削除（通常は含まれない設計）
+      let cleaned = raw.replace(/\s*data-node-id="[^"]*"/g, "");
+
+      // エディタ専用：ADDマーカーコメントを削除
+      cleaned = cleaned.replace(/<!--\s*ADD(?:[\s\S]*?)-->/gi, "");
+
+      const exportDoc = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>export</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+${previewBaseCss}
+  </style>
+</head>
+<body>
+${cleaned}
+</body>
+</html>
+`;
+
+      const blob = new Blob([exportDoc], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "export.html";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setStatus("export.html をダウンロードしました。", false);
+    }
+
+    // 初期サンプル
+    htmlInput.value = `<div class="text-block glow-box fade-in">
+  ここにタイトルテキスト<br />
+  説明文をここに書きます。
+</div>
+
+<img src="images/sample.png" alt="サンプル画像" class="slide-in" />
+
+<div style="margin-top: 24px;">
+  <a href="#" class="btn-primary">スタート</a>
+</div>
+`;
+
+    // 初期化
+    initToolbarTabs();
+    updatePreview();
+  </script>
+</body>
+</html>
