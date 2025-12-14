@@ -259,8 +259,8 @@
               <div class="toolbar-section-body">
                 <button type="button" onclick="insertTextBlock()">テキスト</button>
                 <button type="button" onclick="insertImage()">画像</button>
-                <button type="button" onclick="insertButton()">ボタン</button>
-                <button type="button" onclick="insertLink()">リンク</button>
+                                <button type="button" onclick="insertLink()">リンク</button>
+                <button type="button" onclick="insertButton()">ボタン（区切りなし）</button>
               </div>
             </div>
           </div>
@@ -275,6 +275,8 @@
     <div class="toolbar-section-body">
       <button type="button" onclick="insertGrid2Cols()">横2グリッド</button>
       <button type="button" onclick="insertGrid3Cols()">横3グリッド</button>
+      <button type="button" onclick="insertGlowBoxNoGrid()">光る枠（区切りなし）</button>
+      <button type="button" onclick="insertButton()">ボタン（区切りなし）</button>
     </div>
   </div>
 </div>
@@ -298,8 +300,7 @@
                 <span class="arrow">▼</span>
               </div>
               <div class="toolbar-section-body">
-                <button type="button" onclick="wrapWithEffect('glow-box')">光る枠</button>
-                                                <button type="button" onclick="wrapWithLink()">リンクを貼る</button>
+                                                                <button type="button" onclick="wrapWithLink()">リンクを貼る</button>
               </div>
             </div>
           </div>
@@ -1081,6 +1082,16 @@
       setStatus("ボタン（リンク）を挿入しました。", false);
     }
 
+    function insertGlowBoxNoGrid() {
+      const snippet = `<div class="glow-box" style="width: 360px; height: 220px;">
+  光る枠（区切りなし）
+</div>
+
+`;
+      insertAtCursor(htmlInput, snippet);
+      setStatus("光る枠（区切りなし）を挿入しました。", false);
+    }
+
     function insertLink() {
       const snippet = `<a href="https://example.com" target="_blank">リンクテキスト</a>
 
@@ -1403,7 +1414,7 @@ ${cleaned}
     }
 
     // 初期サンプル
-    htmlInput.value = `<div class="text-block glow-box fade-in">
+    htmlInput.value = `<div class="text-block fade-in">
   ここにタイトルテキスト<br />
   説明文をここに書きます。
 </div>
